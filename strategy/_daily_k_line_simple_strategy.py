@@ -3,8 +3,8 @@ from pnl_tracker import *
 import sys
 import pandas as pd
 
-class DailyKLineSimpleStrategy(BaseStrategy):
-    def __init__(self, start_money, trade_volume, stock_code, dea_period=9, quick_period=12, slow_period=26):
+class KLineSimpleStrategy(BaseStrategy):
+    def __init__(self, start_money, trade_volume, data_period, stock_code, dea_period=9, quick_period=12, slow_period=26):
         super().__init__('daily_k_lime_simple_strategy')
         self.dea_period = dea_period
         self.quick_period = quick_period
@@ -21,12 +21,13 @@ class DailyKLineSimpleStrategy(BaseStrategy):
         self.stock_code = stock_code
         self.pnl_tracker = PnlTracker(int(start_money))
         self.trade_volume = int(trade_volume)
+        self.data_period = data_period
         self.init()
 
     def init(self):
         self.data_storage = '/home/greetlist/macd/data_storage'
-        self.k_line_data = '/home/greetlist/macd/data_storage/{}/stock_daily_data/'
-        data_file = self.k_line_data.format(self.stock_code) + 'kline_daily.csv'
+        self.k_line_data = '/home/greetlist/macd/data_storage/{}/stock_daily_data/kline_daily.csv' if self.data_period == 'daily' else '/home/greetlist/macd/data_storage/{}/stock_60m_data/kline_60m.csv'
+        data_file = self.k_line_data.format(self.stock_code)
         data_df = pd.read_csv(data_file).rename(columns={'Unnamed: 0':'date'})
         print(data_df)
         data_df = data_df[['date', 'close', 'high', 'low', 'volume', 'money']]
@@ -40,6 +41,8 @@ class DailyKLineSimpleStrategy(BaseStrategy):
         self.data_df = data_df
 
     def run(self):
+        last_mid_pirce = 0
+        last_status = ''
         for item in self.data_df.iterrows():
             real_data = item[1]
             #calc ema
@@ -52,15 +55,24 @@ class DailyKLineSimpleStrategy(BaseStrategy):
 
             #define has signal
             mid_price = (real_data['high'] + real_data['low']) / 2
-            if self.__has_buy_signal():
+            if self.__has_buy_signal() and real_data['volume'] > 0:
+                #if last_status == 'buy':
+                #    print('******', real_data['date'])
                 self.pnl_tracker.buy(mid_price, self.trade_volume)
                 print('has buy signal date : {}'.format(real_data['date']))
-            if self.__has_sell_signal():
+                last_status = 'buy'
+            if self.__has_sell_signal() and real_data['volume'] > 0:
+                #if last_status == 'sell':
+                #    print('-------', real_data['date'])
                 self.pnl_tracker.sell(mid_price, self.trade_volume)
                 print('has sell signal date : {}'.format(real_data['date']))
+                last_status = 'sell'
+            last_mid_price = mid_price
 
-            print('Final Pos Value is : {}'.format(self.pnl_tracker.current_pos_value))
-            print('Final Pnl is : {}'.format(self.pnl_tracker.current_pos_value - self.pnl_tracker.start_money))
+        print('mid price : {}, position : {}'.format(self.pnl_tracker.position, last_mid_price))
+        print('Final Pos Value is : {}'.format(self.pnl_tracker.current_pos_value + self.pnl_tracker.position * last_mid_price))
+        print('Final Pnl is : {}'.format(self.pnl_tracker.current_pos_value + self.pnl_tracker.position * mid_price - self.pnl_tracker.start_money))
+        print('Total Fee is : {}'.format(self.pnl_tracker.total_fee))
 
     def __ema_real_calc(self, current, close, alpha):
         return close if current == 0 else close * alpha + (1 - alpha) * current

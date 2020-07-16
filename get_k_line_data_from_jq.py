@@ -11,7 +11,7 @@ def mkdirp(path):
     sub.check_call('mkdir -p {}'.format(path), shell=True)
 
 def get_failed_stock_df():
-    df = pd.read_csv('./stock.csv')
+    df = pd.read_csv('./stock.csv', usecols=['stock_code', 'is_success'])
     df = df[df['is_success'] == False]
     return df
 
