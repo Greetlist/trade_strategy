@@ -71,10 +71,10 @@ class KLineSimpleStrategy(BaseStrategy):
             last_mid_price = mid_price
             self.current_analyze_time = parser.parse(real_data['date'])
 
-        #print('mid price : {}, position : {}'.format(self.pnl_tracker.position, last_mid_price))
-        #print('Final Pos Value is : {}'.format(self.pnl_tracker.current_pos_value + self.pnl_tracker.position * last_mid_price))
-        #print('Final Pnl is : {}'.format(self.pnl_tracker.current_pos_value + self.pnl_tracker.position * mid_price - self.pnl_tracker.start_money))
-        #print('Total Fee is : {}'.format(self.pnl_tracker.total_fee))
+        print('mid price : {}, position : {}'.format(self.pnl_tracker.position, last_mid_price))
+        print('Final Pos Value is : {}'.format(self.pnl_tracker.current_pos_value + self.pnl_tracker.position * last_mid_price))
+        print('Final Pnl is : {}'.format(self.pnl_tracker.current_pos_value + self.pnl_tracker.position * mid_price - self.pnl_tracker.start_money))
+        print('Total Fee is : {}'.format(self.pnl_tracker.total_fee))
 
     def _ema_real_calc(self, current, close, alpha):
         return close if current == 0 else close * alpha + (1 - alpha) * current

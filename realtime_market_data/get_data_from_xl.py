@@ -124,15 +124,17 @@ def run():
             signal = __has_buy_or_sell_signal(stock_tracker.dea_current, cur_dea, stock_tracker.ema_quick_current, cur_ema_quick, stock_tracker.ema_slow_current, cur_ema_slow, current_data['volume'])
             if signal == 'buy':
                 print('********** {} {} has buy signal **********'.format(stock_code, current_data['chinese_name']))
-                print(
-                    'date : {} dea_prev : {}, diff_prev : {}, dea_cur : {}, diff_cur : {}'.format(
-                        stock_tracker.current_analyze_time,
-                        stock_tracker.dea_current,
-                        stock_tracker.ema_quick_current - stock_tracker.ema_slow_current,
-                        cur_dea,
-                        cur_diff))
+                print('')
+                #print(
+                #    'date : {} dea_prev : {}, diff_prev : {}, dea_cur : {}, diff_cur : {}'.format(
+                #        stock_tracker.current_analyze_time,
+                #        stock_tracker.dea_current,
+                #        stock_tracker.ema_quick_current - stock_tracker.ema_slow_current,
+                #        cur_dea,
+                #        cur_diff))
             elif signal == 'sell':
                 print('********** {} {} has sell signal **********'.format(stock_code, current_data['chinese_name']))
+                print('')
 
             # update stock tracker
             #print(current_data['date'], current_data['time'])
