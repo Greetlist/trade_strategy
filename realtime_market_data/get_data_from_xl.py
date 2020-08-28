@@ -12,6 +12,7 @@ from datetime import datetime
 import sys
 sys.path.insert(0, '/home/greetlist/macd/strategy/')
 from _daily_k_line_simple_strategy import *
+from _ma_simple_strategy import *
 
 request_url = 'http://money.finance.sina.com.cn/quotes_service/api/json_v2.php/CN_MarketData.getKLineData?symbol={}&scale={}&ma=5&datalen={}'
 
@@ -28,7 +29,7 @@ def __get_all_stock():
             ret_list.append('sh' + f[0:6])
     return ret_list
 
-all_stock_tracker = defaultdict()
+all_stock_tracker = defaultdict(list)
 stock_list = __get_all_stock()
 
 def __stock_code_transform(xinlang_stock_code):
@@ -39,7 +40,10 @@ def __stock_code_transform(xinlang_stock_code):
 def __init():
     global stock_list, all_stock_tracker
     for stock_code in stock_list:
-        all_stock_tracker[stock_code] = KLineSimpleStrategy(start_money=0, trade_volume=0, data_period='60m', stock_code=__stock_code_transform(stock_code))
+        jk_stock_code = __stock_code_transform(stock_code)
+        if jk_stock_code.startswith('00'):
+            all_stock_tracker[stock_code].append(KLineSimpleStrategy(start_money=0, trade_volume=0, data_period='60m', stock_code=jk_stock_code))
+            all_stock_tracker[stock_code].append(MASimpleStrategy(stock_code=jk_stock_code, data_period='60m'))
 
 def __get_history_60m_market_data(stock_code):
     res = requests.get(request_url.format(stock_code, 60, 1024))
@@ -98,55 +102,32 @@ def run():
     # deal history data
     for stock_code in stock_list:
         try:
-            all_stock_tracker[stock_code].init()
-            all_stock_tracker[stock_code].run()
+            for strategy in all_stock_tracker[stock_code]:
+                strategy.load_all_history_data()
             print('*********************** Success init {}  ***********************'.format(stock_code))
         except Exception as e:
             #print('*********************** {}\'s History Data is not prepared. ***********************'.format(stock_code))
             del all_stock_tracker[stock_code]
 
-    #activate_stock_list = list(all_stock_tracker.keys())
-    #current_market_data = __get_current_market_data(activate_stock_list)
-    #sys.exit(1)
     while True:
         # deal current market data
         activate_stock_list = list(all_stock_tracker.keys())
         current_market_data = __get_current_market_data(activate_stock_list)
         for stock_code in activate_stock_list:
-            stock_tracker = all_stock_tracker[stock_code]
-            current_data = current_market_data[stock_code]
+            all_strategy = all_stock_tracker[stock_code]
             if len(current_data.keys()) < 1:
                 continue
-            cur_ema_quick = stock_tracker._ema_real_calc(stock_tracker.ema_quick_current, current_data['current_price'], stock_tracker.ema_quick_alpha)
-            cur_ema_slow = stock_tracker._ema_real_calc(stock_tracker.ema_slow_current, current_data['current_price'], stock_tracker.ema_slow_alpha)
-            cur_diff = cur_ema_quick - cur_ema_slow
-            cur_dea = stock_tracker._ema_real_calc(stock_tracker.dea_current, cur_diff, stock_tracker.dea_alpha)
-            signal = __has_buy_or_sell_signal(stock_tracker.dea_current, cur_dea, stock_tracker.ema_quick_current, cur_ema_quick, stock_tracker.ema_slow_current, cur_ema_slow, current_data['volume'])
-            if signal == 'buy':
-                print('********** {} {} has buy signal **********'.format(stock_code, current_data['chinese_name']))
-                print('')
-                #print(
-                #    'date : {} dea_prev : {}, diff_prev : {}, dea_cur : {}, diff_cur : {}'.format(
-                #        stock_tracker.current_analyze_time,
-                #        stock_tracker.dea_current,
-                #        stock_tracker.ema_quick_current - stock_tracker.ema_slow_current,
-                #        cur_dea,
-                #        cur_diff))
-            elif signal == 'sell':
-                print('********** {} {} has sell signal **********'.format(stock_code, current_data['chinese_name']))
-                print('')
+            buy_signal = False
+            sell_signal = False
+            for single_strategy in all_strategy:
+                single_strategy._main_calc_func(current_market_data['close'], current_market_data['date'] + current_market_data['time'])
+                buy_signal = buy_signal and single_strategy._has_buy_signal(current_market_data['close'])
+                sell_signal = sell_signal and single_strategy._has_sell_signal(current_market_data['close'])
 
-            # update stock tracker
-            #print(current_data['date'], current_data['time'])
-            item_date = datetime.strptime(current_data['date'] + ' ' + current_data['time'], '%Y-%m-%d %H:%M:%S')
-            if stock_tracker.current_analyze_time < item_date and (item_date - stock_tracker.current_analyze_time).seconds > 3600:
-                stock_tracker.ema_quick_prev = stock_tracker.ema_quick_current
-                stock_tracker.ema_quick_current = cur_ema_quick
-                stock_tracker.ema_slow_prev = stock_tracker.ema_slow_current
-                stock_tracker.ema_slow_current = cur_ema_slow
-                stock_tracker.dea_prev = stock_tracker.dea_current
-                stock_tracker.dea_current = cur_dea
-                stock_tracker.current_analyze_time = item_date
+            if buy_signal:
+                print('********** {} {} has buy signal **********'.format(stock_code, current_data['chinese_name']))
+            if sell_signal:
+                print('********** {} {} has sell signal **********'.format(stock_code, current_data['chinese_name']))
         time.sleep(60)
 
 if __name__ == '__main__':

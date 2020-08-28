@@ -23,7 +23,10 @@ class KLineSimpleStrategy(BaseStrategy):
         self.pnl_tracker = PnlTracker(int(start_money))
         self.trade_volume = int(trade_volume)
         self.data_period = data_period
-        self.current_analyze_time = None
+        self.current_analyze_time = parser.parse('1970-01-01')
+        self.all_diff_value = []
+        self.all_macd_value = []
+        self.init()
 
     def init(self):
         self.data_storage = '/home/greetlist/macd/data_storage'
@@ -38,60 +41,69 @@ class KLineSimpleStrategy(BaseStrategy):
             'low' : float,
             'volume' : float,
             'money' : float})
-        self.data_df = data_df
+        self.data_df = data_df.fillna(0)
 
-    def run(self):
+    def load_all_history_data(self):
         last_mid_pirce = 0
         last_status = ''
         for item in self.data_df.iterrows():
             real_data = item[1]
-            #calc ema
-            self._calc_k_line_ema(real_data)
-            #diff = EMA(close, quick_period) - EMA(close, slow_period)
-            cur_diff = self.ema_quick_current - self.ema_slow_current
-            #calc dea
-            self.dea_prev = self.dea_current
-            self.dea_current = self._ema_real_calc(self.dea_current, cur_diff, self.dea_alpha)
+            self._main_calc_func(float(real_data['close']), real_data['date'])
+        self.data_df['DIFF'] = self.all_diff_value
+        self.data_df['MACD'] = self.all_macd_value
 
-            #define has signal
-            mid_price = (real_data['high'] + real_data['low']) / 2
-            if self._has_buy_signal() and real_data['volume'] > 0:
-                #if last_status == 'buy':
-                #    print('******', real_data['date'])
-                self.pnl_tracker.buy(mid_price, self.trade_volume)
-                #print('has buy signal date : {}'.format(real_data['date']))
-                #print('dea current : {}, diff current : {}'.format(self.dea_current, cur_diff))
-                last_status = 'buy'
-            if self._has_sell_signal() and real_data['volume'] > 0:
-                #if last_status == 'sell':
-                #    print('-------', real_data['date'])
-                self.pnl_tracker.sell(mid_price, self.trade_volume)
-                #print('has sell signal date : {}'.format(real_data['date']))
-                last_status = 'sell'
-            last_mid_price = mid_price
-            self.current_analyze_time = parser.parse(real_data['date'])
+    def _main_calc_func(self, price, date):
+        #calc EMA
+        cur_ema_quick, cur_ema_slow = self._calc_k_line_ema(price)
+        #diff = EMA(close, quick_period) - EMA(close, slow_period)
+        cur_diff = cur_ema_quick - cur_ema_slow
+        #calc DEA
+        self.dea_prev = self.dea_current
+        self.dea_current = self._ema_real_calc(self.dea_current, cur_diff, self.dea_alpha)
+        #calc macd MACD = 2 * DEA
+        cur_macd = 2 * (cur_diff - self.dea_current)
+        analyze_time = parser.parse(date)
 
-        print('mid price : {}, position : {}'.format(self.pnl_tracker.position, last_mid_price))
-        print('Final Pos Value is : {}'.format(self.pnl_tracker.current_pos_value + self.pnl_tracker.position * last_mid_price))
-        print('Final Pnl is : {}'.format(self.pnl_tracker.current_pos_value + self.pnl_tracker.position * mid_price - self.pnl_tracker.start_money))
-        print('Total Fee is : {}'.format(self.pnl_tracker.total_fee))
+        if (analyze_time - self.current_analyze_time).seconds >= 3600:
+            self.all_diff_value.append(cur_diff)
+            self.all_macd_value.append(cur_macd)
+            self.ema_quick_prev = cur_ema_quick
+            self.ema_slow_prev = cur_ema_slow
+        else:
+            self.all_diff_value[-1] = cur_diff
+            self.all_macd_value[-1] = cur_macd
+        self.current_analyze_time = parser.parse(date)
 
-    def _ema_real_calc(self, current, close, alpha):
-        return close if current == 0 else close * alpha + (1 - alpha) * current
+    def _calc_k_line_ema(self, close):
+        ema_quick_current = self._ema_real_calc(self.ema_quick_prev, close, self.ema_quick_alpha)
+        ema_slow_current = self._ema_real_calc(self.ema_slow_prev, close, self.ema_slow_alpha)
+        return ema_quick_current, ema_slow_current
 
-    def _calc_k_line_ema(self, data_series):
-        close = float(data_series['close'])
-        high = float(data_series['high'])
-        low = float(data_series['low'])
-        volume = float(data_series['volume'])
+    def _ema_real_calc(self, prev, close, alpha):
+        return close if prev == 0 else close * alpha + (1 - alpha) * prev
 
-        self.ema_quick_prev = self.ema_quick_current
-        self.ema_slow_prev = self.ema_slow_current
-        self.ema_quick_current = self._ema_real_calc(self.ema_quick_current, close, self.ema_quick_alpha)
-        self.ema_slow_current = self._ema_real_calc(self.ema_slow_current, close, self.ema_slow_alpha)
+    def _has_buy_signal(self, index):
+        if index > 0 and index < len(self.all_macd_value):
+            return self.all_macd_value[index] - self.all_macd_value[index-1] >= 0.05
 
-    def _has_buy_signal(self):
-        return self.dea_prev > (self.ema_quick_prev - self.ema_slow_prev) and self.dea_current < (self.ema_quick_current - self.ema_slow_current)
+    def _has_sell_signal(self, index):
+        if index > 0 and index < len(self.all_macd_value):
+            return self.all_macd_value[index] - self.all_macd_value[index-1] < -0.05
 
-    def _has_sell_signal(self):
-        return self.dea_prev < (self.ema_quick_prev - self.ema_slow_prev) and self.dea_current > (self.ema_quick_current - self.ema_slow_current)
+    def _realtime_has_buy_signal(self, price):
+        return self.all_macd_value[-1] - self.all_macd_value[-2] >= 0.05
+
+    def _realtime_has_sell_signal(self, price):
+        return self.all_macd_value[-1] - self.all_macd_value[-2] < 0.05
+
+    def _macd_has_buy_signal(self, index):
+        if index > 0 and index < len(self.all_macd_value):
+            if self.all_macd_value[index] > 0 and self.all_macd_value[index-1] < 0 and self._has_buy_signal(index):
+                return True
+        return False
+
+    def _macd_has_sell_signal(self, index):
+        if index > 0 and index < len(self.all_macd_value):
+            if self.all_macd_value[index] <= 0 and self.all_macd_value[index-1] >= 0 and self._has_sell_signal(index):
+                return True
+        return False
