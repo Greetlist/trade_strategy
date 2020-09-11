@@ -8,6 +8,7 @@ class PnlTracker():
         self.total_fee = 0
 
     def buy(self, price, volume):
+        volume = self.control_position(price)
         if volume % 100 != 0:
             return -1
         need_money = price * volume
@@ -19,6 +20,7 @@ class PnlTracker():
         self.total_fee += fee
 
     def sell(self, price, volume):
+        volume = self.position
         if volume % 100 != 0:
             return -1
         if self.position < volume:
@@ -28,3 +30,8 @@ class PnlTracker():
         self.current_pos_value += (sell_money - fee)
         self.position -= volume
         self.total_fee += fee
+
+    def control_position(self, price):
+        usable_money = self.current_pos_value * 0.3
+        can_buy = int(usable_money / price)
+        return  can_buy - can_buy % 100

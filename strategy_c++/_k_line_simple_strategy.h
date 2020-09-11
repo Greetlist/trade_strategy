@@ -5,7 +5,7 @@
 #include "csv_reader.h"
 #include <string>
 
-class KLineSimpleStrategy {
+class KLineSimpleStrategy : public BaseStrategy {
 public:
     KLineSimpleStrategy(std::string stk_code, std::string peroid="daily", int ema_quick_peroid=12, int ema_slow_peroid=26, int dea_peroid=9) : stock_code(stk_code) {
         this->ema_quick_alpha = 2.0 / (ema_quick_peroid + 1);
@@ -15,11 +15,11 @@ public:
     }
     ~KLineSimpleStrategy();
     void load_history_data();
-    void regression_test();
-private:
-    void init(std::string peroid);
     inline bool has_buy_signal();
     inline bool has_sell_signal();
+    void init(std::string peroid);
+    void regression_test();
+private:
     inline double calc_ema(double close, double current, double alpha);
     void update_self_ema(double close);
     void update_self_dea(double diff);

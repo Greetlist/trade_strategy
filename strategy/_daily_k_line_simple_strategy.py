@@ -27,6 +27,8 @@ class KLineSimpleStrategy(BaseStrategy):
         self.all_diff_value = []
         self.all_macd_value = []
         self.init()
+        self.init_flag = False
+        self.load_all_history_data()
 
     def init(self):
         self.data_storage = '/home/greetlist/macd/data_storage'
@@ -51,6 +53,8 @@ class KLineSimpleStrategy(BaseStrategy):
             self._main_calc_func(float(real_data['close']), real_data['date'])
         self.data_df['DIFF'] = self.all_diff_value
         self.data_df['MACD'] = self.all_macd_value
+        self.data_df = None
+        self.init_flag = True
 
     def _main_calc_func(self, price, date):
         #calc EMA
@@ -69,10 +73,10 @@ class KLineSimpleStrategy(BaseStrategy):
             self.all_macd_value.append(cur_macd)
             self.ema_quick_prev = cur_ema_quick
             self.ema_slow_prev = cur_ema_slow
+            self.current_analyze_time = parser.parse(date)
         else:
             self.all_diff_value[-1] = cur_diff
             self.all_macd_value[-1] = cur_macd
-        self.current_analyze_time = parser.parse(date)
 
     def _calc_k_line_ema(self, close):
         ema_quick_current = self._ema_real_calc(self.ema_quick_prev, close, self.ema_quick_alpha)

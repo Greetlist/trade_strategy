@@ -15,6 +15,8 @@ class MASimpleStrategy(BaseStrategy):
         self.init()
         self.ratio = ratio
         self.current_analyze_time = parser.parse('1970-01-01')
+        self.init_flag = False
+        self.load_all_history_data()
 
     def init(self):
         self.data_storage = '/home/greetlist/macd/data_storage'
@@ -32,40 +34,52 @@ class MASimpleStrategy(BaseStrategy):
         self.data_df = data_df.fillna(0)
 
     def _main_calc_func(self, price, date):
+        analyze_time = parser.parse(date)
         for i in range(len(self.total_period_list)):
-            if len(self.price_queues[i]) < self.total_period_list[i]:
+            if len(self.price_queues[i]) <= self.total_period_list[i]:
                 self.price_queues[i].append(price)
-                self.ma_list[i].append(self.cur_ma_value[i])
-            else:
-                # init
-                if self.cur_ma_value[i] < 0:
-                    cur_sum = 0
-                    for single_price in self.price_queues[i]:
-                        cur_sum += single_price
-                    self.cur_ma_value[i] = cur_sum / self.total_period_list[i]
+                if len(self.price_queues[i]) < self.total_period_list[i]:
                     self.ma_list[i].append(self.cur_ma_value[i])
-                else:
-                    analyze_time = parser.parse(date)
-                    if (analyze_time - self.current_analyze_time).seconds >= 3600:
-                        self.cur_ma_value[i] = \
-                            self.ma_list[i][-1] + (price - self.price_queues[i][0]) / self.total_period_list[i]
+
+                # init
+                if len(self.price_queues[i]) == self.total_period_list[i]:
+                    if self.cur_ma_value[i] < 0:
+                        cur_sum = 0
+                        for single_price in self.price_queues[i]:
+                            cur_sum += single_price
+                        self.cur_ma_value[i] = cur_sum / self.total_period_list[i]
                         self.ma_list[i].append(self.cur_ma_value[i])
-                        self.price_queues[i].append(price)
-                        self.price_queues[i] = self.price_queues[i][1:]
-                    else:
-                        cur_ma_value = self.ma_list[i][-2] + (price - self.price_queues[i][0]) / self.total_period_list[i]
-                        self.ma_list[i][-1] = cur_ma_value
-        self.current_analyze_time = parser.parse(date)
+                if len(self.price_queues[i]) == self.total_period_list[i] + 1:
+                    self.cur_ma_value[i] = \
+                        self.ma_list[i][-1] + (self.price_queues[i][-1] - self.price_queues[i][0]) / self.total_period_list[i]
+                    self.ma_list[i].append(self.cur_ma_value[i])
+                    self.current_analyze_time = analyze_time
+            else:
+                if (analyze_time - self.current_analyze_time).seconds >= 3600:
+                    self.price_queues[i].append(price)
+                    self.price_queues[i] = self.price_queues[i][1:]
+                    self.cur_ma_value[i] = \
+                        self.ma_list[i][-1] + (self.price_queues[i][-1] - self.price_queues[i][0]) / self.total_period_list[i]
+                    self.ma_list[i].append(self.cur_ma_value[i])
+                # for realtime
+                else:
+                    self.price_queues[i][-1] = price
+                    cur_ma_value = self.ma_list[i][-2] + (self.price_queues[i][-1] - self.price_queues[i][0]) / self.total_period_list[i]
+                    self.ma_list[i][-1] = cur_ma_value
+        if (analyze_time - self.current_analyze_time).seconds >= 3600:
+            self.current_analyze_time = analyze_time
 
     def load_all_history_data(self):
         for item in self.data_df.iterrows():
             real_data = item[1]
             self._main_calc_func(real_data['close'], real_data['date'])
 
-        print(len(self.data_df), len(self.ma_list[0]))
         self.data_df['MA5'] = self.ma_list[0]
         self.data_df['MA10'] = self.ma_list[1]
         self.data_df['MA20'] = self.ma_list[2]
+        self.data_df.to_csv('/home/greetlist/macd/realtime_market_data/{}_ma.csv'.format(self.stock_code))
+        self.data_df = None
+        self.init_flag = True
 
     def _has_buy_signal(self, index):
         if index > 0 and index < len(self.all_macd_value):
@@ -76,9 +90,11 @@ class MASimpleStrategy(BaseStrategy):
             return self.ma_list[0][index] - self.ma_list[0][index-1] < self.data_df['close'].values[index] / self.ratio
 
     def _realtime_has_buy_signal(self, price):
+        price = self.price_queues[-2]
         return self.ma_list[0][-1] - self.ma_list[0][-2] >= price / self.ratio
 
     def _realtime_has_sell_signal(self, price):
+        price = self.price_queues[-2]
         return self.ma_list[0][-1] - self.ma_list[0][-2] < price / self.ratio
 
 if __name__ == '__main__':

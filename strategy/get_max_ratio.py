@@ -49,4 +49,4 @@ if __name__ == '__main__':
             ma_bigger += 1
         else:
             no_ma_bigger += 1
-    print(ma_bigger, no_ma_bigger)
+    print('ma bigger : {}, no_ma_bigger : {}'.format(ma_bigger, no_ma_bigger))

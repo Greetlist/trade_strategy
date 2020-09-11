@@ -7,7 +7,7 @@ from collections import defaultdict
 import importlib
 from dateutil import parser
 import re
-from datetime import datetime
+import datetime as dt
 
 import sys
 sys.path.insert(0, '/home/greetlist/macd/strategy/')
@@ -18,6 +18,22 @@ request_url = 'http://money.finance.sina.com.cn/quotes_service/api/json_v2.php/C
 
 cur_market_url = 'http://hq.sinajs.cn/list={}'
 stock_dir = '/home/greetlist/macd/stock_status/'
+
+specical_list = ['002142.XSHE', '600316.XSHG']
+
+def is_stock_trading_time():
+    morning_start = (9 * 60 + 30) * 60
+    morning_end = (11 * 60 + 30) * 60
+    noon_start = 13 * 60 * 60
+    noon_end = 15 * 60 * 60
+    day_second = 24 * 60 * 60
+    time_zone_delta = 8 * 60 * 60
+    now = int(time.time())
+    today_delta = now % day_second + time_zone_delta
+    if today_delta > morning_start and today_delta < morning_end \
+        or today_delta > noon_start and today_delta < noon_end:
+        return True
+    return False
 
 def __get_all_stock():
     ret_list = []
@@ -39,11 +55,15 @@ def __stock_code_transform(xinlang_stock_code):
 
 def __init():
     global stock_list, all_stock_tracker
+    i = 0
     for stock_code in stock_list:
         jk_stock_code = __stock_code_transform(stock_code)
-        if jk_stock_code.startswith('00'):
+        if jk_stock_code in specical_list:
+            start_time = time.time()
             all_stock_tracker[stock_code].append(KLineSimpleStrategy(start_money=0, trade_volume=0, data_period='60m', stock_code=jk_stock_code))
             all_stock_tracker[stock_code].append(MASimpleStrategy(stock_code=jk_stock_code, data_period='60m'))
+            print('{} cost : {}'.format(i, time.time() - start_time))
+            i += 1
 
 def __get_history_60m_market_data(stock_code):
     res = requests.get(request_url.format(stock_code, 60, 1024))
@@ -99,36 +119,49 @@ def __has_buy_or_sell_signal(dea_prev, dea_current, ema_quick_prev, ema_quick_cu
 
 def run():
     global stock_list, all_stock_tracker
+    activate_stock_list = list(all_stock_tracker.keys())
     # deal history data
-    for stock_code in stock_list:
+    for stock_code in activate_stock_list:
         try:
             for strategy in all_stock_tracker[stock_code]:
-                strategy.load_all_history_data()
-            print('*********************** Success init {}  ***********************'.format(stock_code))
+                if not strategy.init_flag:
+                    del all_stock_tracker[stock_code]
+                else:
+                    print('*********************** Success init {}  ***********************'.format(stock_code))
         except Exception as e:
             #print('*********************** {}\'s History Data is not prepared. ***********************'.format(stock_code))
             del all_stock_tracker[stock_code]
 
     while True:
+        #if not is_stock_trading_time():
+        #    print("********** not in trading time **********")
+        #    time.sleep(60)
+        #    continue
         # deal current market data
-        activate_stock_list = list(all_stock_tracker.keys())
         current_market_data = __get_current_market_data(activate_stock_list)
+        print(''.join(('-' * 100)))
         for stock_code in activate_stock_list:
             all_strategy = all_stock_tracker[stock_code]
-            if len(current_data.keys()) < 1:
+            if len(current_market_data.keys()) < 1:
                 continue
             buy_signal = False
             sell_signal = False
             for single_strategy in all_strategy:
-                single_strategy._main_calc_func(current_market_data['close'], current_market_data['date'] + current_market_data['time'])
-                buy_signal = buy_signal and single_strategy._has_buy_signal(current_market_data['close'])
-                sell_signal = sell_signal and single_strategy._has_sell_signal(current_market_data['close'])
+                single_strategy._main_calc_func(current_market_data[stock_code]['current_price'], current_market_data[stock_code]['date'] + ' ' + current_market_data[stock_code]['time'])
+                buy_signal = buy_signal and single_strategy._has_buy_signal(current_market_data[stock_code]['current_price'])
+                sell_signal = sell_signal and single_strategy._has_sell_signal(current_market_data[stock_code]['current_price'])
+            print('{} {}'.format(stock_code, all_stock_tracker[stock_code][1].price_queues))
+            print('^^^^^^^^^^^^^^^^^^^^^ {} ^^^^^^^^^^^^^^^^^^^^^^^^^^'.format(current_market_data[stock_code]['date'] + ' ' + current_market_data[stock_code]['time']))
+            print('********** {} ma : {} {} current_close : {} **********'.format(stock_code, all_stock_tracker[stock_code][1].ma_list[0][-1], all_stock_tracker[stock_code][1].ma_list[0][-2], current_market_data[stock_code]['current_price']))
+            print('********** {} macd : {} {} current_close : {} **********'.format(stock_code, all_stock_tracker[stock_code][0].all_macd_value[-1], all_stock_tracker[stock_code][0].all_macd_value[-2], current_market_data[stock_code]['current_price']))
 
             if buy_signal:
-                print('********** {} {} has buy signal **********'.format(stock_code, current_data['chinese_name']))
+                print('********** {} {} has buy signal **********'.format(stock_code, current_market_data[stock_code]['chinese_name']))
             if sell_signal:
-                print('********** {} {} has sell signal **********'.format(stock_code, current_data['chinese_name']))
-        time.sleep(60)
+                print('********** {} {} has sell signal **********'.format(stock_code, current_market_data[stock_code]['chinese_name']))
+        print("********** end of analyze single round **********")
+        print(''.join(('-' * 101)))
+        time.sleep(10)
 
 if __name__ == '__main__':
     __init()
