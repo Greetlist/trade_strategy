@@ -8,6 +8,7 @@ import importlib
 from dateutil import parser
 import re
 import datetime as dt
+import traceback
 
 import sys
 sys.path.insert(0, '/home/greetlist/macd/strategy/')
@@ -30,8 +31,8 @@ def is_stock_trading_time():
     time_zone_delta = 8 * 60 * 60
     now = int(time.time())
     today_delta = now % day_second + time_zone_delta
-    if today_delta > morning_start and today_delta < morning_end \
-        or today_delta > noon_start and today_delta < noon_end:
+    if (today_delta > morning_start and today_delta < morning_end) or \
+        (today_delta > noon_start and today_delta < noon_end):
         return True
     return False
 
@@ -130,14 +131,15 @@ def run():
                     print('*********************** Success init {}  ***********************'.format(stock_code))
         except Exception as e:
             #print('*********************** {}\'s History Data is not prepared. ***********************'.format(stock_code))
+            print(traceback.format_exec())
             del all_stock_tracker[stock_code]
 
     while True:
-        #if not is_stock_trading_time():
-        #    print("********** not in trading time **********")
-        #    time.sleep(60)
-        #    continue
-        # deal current market data
+        if not is_stock_trading_time():
+           print("********** not in trading time **********")
+           time.sleep(60)
+           continue
+        #deal current market data
         current_market_data = __get_current_market_data(activate_stock_list)
         print(''.join(('-' * 100)))
         for stock_code in activate_stock_list:

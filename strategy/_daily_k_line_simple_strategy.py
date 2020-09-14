@@ -3,6 +3,7 @@ from pnl_tracker import *
 import sys
 import pandas as pd
 from dateutil import parser
+import datetime
 
 class KLineSimpleStrategy(BaseStrategy):
     def __init__(self, start_money, trade_volume, data_period, stock_code, dea_period=9, quick_period=12, slow_period=26):
@@ -28,6 +29,7 @@ class KLineSimpleStrategy(BaseStrategy):
         self.all_macd_value = []
         self.init()
         self.init_flag = False
+        self.is_today_init = False
         self.load_all_history_data()
 
     def init(self):
@@ -55,6 +57,7 @@ class KLineSimpleStrategy(BaseStrategy):
         self.data_df['MACD'] = self.all_macd_value
         self.data_df = None
         self.init_flag = True
+        self.is_today_init = True
 
     def _main_calc_func(self, price, date):
         #calc EMA
@@ -62,8 +65,7 @@ class KLineSimpleStrategy(BaseStrategy):
         #diff = EMA(close, quick_period) - EMA(close, slow_period)
         cur_diff = cur_ema_quick - cur_ema_slow
         #calc DEA
-        self.dea_prev = self.dea_current
-        self.dea_current = self._ema_real_calc(self.dea_current, cur_diff, self.dea_alpha)
+        self.dea_current = self._ema_real_calc(self.dea_prev, cur_diff, self.dea_alpha)
         #calc macd MACD = 2 * DEA
         cur_macd = 2 * (cur_diff - self.dea_current)
         analyze_time = parser.parse(date)
@@ -71,10 +73,15 @@ class KLineSimpleStrategy(BaseStrategy):
         if (analyze_time - self.current_analyze_time).seconds >= 3600:
             self.all_diff_value.append(cur_diff)
             self.all_macd_value.append(cur_macd)
-            self.ema_quick_prev = cur_ema_quick
-            self.ema_slow_prev = cur_ema_slow
+            if not self.is_today_init:
+                self.ema_quick_prev = cur_ema_quick
+                self.ema_slow_prev = cur_ema_slow
+                self.dea_prev = self.dea_current
+            else:
+                self.is_today_init = False
             self.current_analyze_time = parser.parse(date)
         else:
+            print(self.ema_quick_prev, self.ema_slow_prev, self.dea_prev)
             self.all_diff_value[-1] = cur_diff
             self.all_macd_value[-1] = cur_macd
 
