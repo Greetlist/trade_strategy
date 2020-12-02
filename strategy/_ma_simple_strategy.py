@@ -3,10 +3,16 @@ from pnl_tracker import *
 import pandas as pd
 from dateutil import parser
 import datetime
+import os
+import subprocess as sub
 
 class MASimpleStrategy(BaseStrategy):
     def __init__(self, stock_code, data_period, ratio=450, short_period=5, mid_period=10, long_period=20):
         self.data_period = data_period
+        #self.total_period_list = [4, short_period, 6, 7, mid_period, long_period]
+        self.short_period = short_period
+        self.mid_period = mid_period
+        self.long_period = long_period
         self.total_period_list = [short_period, mid_period, long_period]
         self.price_queues = [list() for period in self.total_period_list]
         self.ma_list = [list() for period in self.total_period_list]
@@ -16,14 +22,15 @@ class MASimpleStrategy(BaseStrategy):
         self.ratio = ratio
         self.current_analyze_time = parser.parse('1970-01-01')
         self.init_flag = False
-        self.load_all_history_data()
+        #self.load_all_history_data()
 
     def init(self):
         self.data_storage = '/home/greetlist/macd/data_storage'
+        self.res_dir = '/home/greetlist/macd/result'
         self.k_line_data = '/home/greetlist/macd/data_storage/{}/stock_daily_data/kline_daily.csv' if self.data_period == 'daily' else '/home/greetlist/macd/data_storage/{}/stock_60m_data/kline_60m.csv'
         data_file = self.k_line_data.format(self.stock_code)
-        data_df = pd.read_csv(data_file, index_col=0)
-        data_df = data_df[['date', 'close', 'high', 'low', 'volume', 'money']]
+        data_df = pd.read_csv(data_file, index_col=0).reset_index()[-1000:]
+
         data_df = data_df.astype({
             'date' : str,
             'close' : float,
@@ -74,20 +81,27 @@ class MASimpleStrategy(BaseStrategy):
             real_data = item[1]
             self._main_calc_func(real_data['close'], real_data['date'])
 
-        self.data_df['MA5'] = self.ma_list[0]
-        self.data_df['MA10'] = self.ma_list[1]
-        self.data_df['MA20'] = self.ma_list[2]
-        self.data_df.to_csv('/home/greetlist/macd/realtime_market_data/{}_ma.csv'.format(self.stock_code))
-        self.data_df = None
+        for i in range(len(self.total_period_list)):
+            period_str = str(self.total_period_list[i])
+            ori_str = 'MA' + period_str
+            prev_str = 'PREV_MA' + period_str
+            diff_str = 'MA_DIFF' + period_str
+            self.data_df[ori_str] = self.ma_list[i]
+            self.data_df[prev_str] = [-1] + self.ma_list[i][:-1]
+            self.data_df[diff_str] = self.data_df[ori_str] - self.data_df[prev_str]
+            self.data_df['Signal'+period_str] = self.data_df[['close', diff_str]].apply(lambda x: 'buy' if x[1] >= x[0] / self.ratio else ('sell' if x[1] < -x[0] / self.ratio else 'NoSignal'), axis=1)
+        #self.data_df = None
+        sub.check_call('mkdir -p {}'.format(os.path.join(self.res_dir, self.stock_code)), shell=True)
+        self.data_df.to_csv(os.path.join(self.res_dir, self.stock_code, 'result_ma.csv'), index=False)
         self.init_flag = True
 
     def _has_buy_signal(self, index):
-        if index > 0 and index < len(self.all_macd_value):
+        if index > 0 and index < len(self.ma_list[0]):
             return self.ma_list[0][index] - self.ma_list[0][index-1] > self.data_df['close'].values[index] / self.ratio
 
     def _has_sell_signal(self, index):
-        if index > 0 and index < len(self.all_macd_value):
-            return self.ma_list[0][index] - self.ma_list[0][index-1] < self.data_df['close'].values[index] / self.ratio
+        if index > 0 and index < len(self.ma_list[0]):
+            return self.ma_list[0][index] - self.ma_list[0][index-1] < -(self.data_df['close'].values[index] / self.ratio)
 
     def _realtime_has_buy_signal(self, price):
         price = self.price_queues[-2]
@@ -95,7 +109,7 @@ class MASimpleStrategy(BaseStrategy):
 
     def _realtime_has_sell_signal(self, price):
         price = self.price_queues[-2]
-        return self.ma_list[0][-1] - self.ma_list[0][-2] < price / self.ratio
+        return self.ma_list[0][-1] - self.ma_list[0][-2] < -(price / self.ratio)
 
 if __name__ == '__main__':
     ma = MASimpleStrategy('002142.XSHE', '60m')

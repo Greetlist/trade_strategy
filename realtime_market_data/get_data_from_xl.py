@@ -20,7 +20,7 @@ request_url = 'http://money.finance.sina.com.cn/quotes_service/api/json_v2.php/C
 cur_market_url = 'http://hq.sinajs.cn/list={}'
 stock_dir = '/home/greetlist/macd/stock_status/'
 
-specical_list = ['002142.XSHE', '600316.XSHG']
+specical_list = ['002142.XSHE', '600316.XSHG', '600030.XSHG']
 
 def is_stock_trading_time():
     morning_start = (9 * 60 + 30) * 60
@@ -150,12 +150,15 @@ def run():
             sell_signal = False
             for single_strategy in all_strategy:
                 single_strategy._main_calc_func(current_market_data[stock_code]['current_price'], current_market_data[stock_code]['date'] + ' ' + current_market_data[stock_code]['time'])
-                buy_signal = buy_signal and single_strategy._has_buy_signal(current_market_data[stock_code]['current_price'])
-                sell_signal = sell_signal and single_strategy._has_sell_signal(current_market_data[stock_code]['current_price'])
-            print('{} {}'.format(stock_code, all_stock_tracker[stock_code][1].price_queues))
+                buy_signal = buy_signal and single_strategy._realtime_has_buy_signal(current_market_data[stock_code]['current_price'])
+                sell_signal = sell_signal and single_strategy._realtime_has_sell_signal(current_market_data[stock_code]['current_price'])
+            #print('{} {}'.format(stock_code, all_stock_tracker[stock_code][1].price_queues))
             print('^^^^^^^^^^^^^^^^^^^^^ {} ^^^^^^^^^^^^^^^^^^^^^^^^^^'.format(current_market_data[stock_code]['date'] + ' ' + current_market_data[stock_code]['time']))
             print('********** {} ma : {} {} current_close : {} **********'.format(stock_code, all_stock_tracker[stock_code][1].ma_list[0][-1], all_stock_tracker[stock_code][1].ma_list[0][-2], current_market_data[stock_code]['current_price']))
             print('********** {} macd : {} {} current_close : {} **********'.format(stock_code, all_stock_tracker[stock_code][0].all_macd_value[-1], all_stock_tracker[stock_code][0].all_macd_value[-2], current_market_data[stock_code]['current_price']))
+            print('****************** {} ma_delta: {}, macd_delta: {} **********************'.format(
+                stock_code, all_stock_tracker[stock_code][1].ma_list[0][-1] - all_stock_tracker[stock_code][1].ma_list[0][-2],
+                all_stock_tracker[stock_code][0].all_macd_value[-1] - all_stock_tracker[stock_code][0].all_macd_value[-2]))
 
             if buy_signal:
                 print('********** {} {} has buy signal **********'.format(stock_code, current_market_data[stock_code]['chinese_name']))
@@ -163,7 +166,7 @@ def run():
                 print('********** {} {} has sell signal **********'.format(stock_code, current_market_data[stock_code]['chinese_name']))
         print("********** end of analyze single round **********")
         print(''.join(('-' * 101)))
-        time.sleep(10)
+        time.sleep(4)
 
 if __name__ == '__main__':
     __init()

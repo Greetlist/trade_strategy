@@ -4,6 +4,8 @@ import sys
 import pandas as pd
 from dateutil import parser
 import datetime
+import os
+import subprocess as sub
 
 class KLineSimpleStrategy(BaseStrategy):
     def __init__(self, start_money, trade_volume, data_period, stock_code, dea_period=9, quick_period=12, slow_period=26):
@@ -30,14 +32,15 @@ class KLineSimpleStrategy(BaseStrategy):
         self.init()
         self.init_flag = False
         self.is_today_init = False
-        self.load_all_history_data()
+        self.ratio = 33
+        #self.load_all_history_data()
 
     def init(self):
         self.data_storage = '/home/greetlist/macd/data_storage'
+        self.res_dir = '/home/greetlist/macd/result'
         self.k_line_data = '/home/greetlist/macd/data_storage/{}/stock_daily_data/kline_daily.csv' if self.data_period == 'daily' else '/home/greetlist/macd/data_storage/{}/stock_60m_data/kline_60m.csv'
         data_file = self.k_line_data.format(self.stock_code)
-        data_df = pd.read_csv(data_file, index_col=0)#.rename(columns={'Unnamed: 0':'date'})
-        data_df = data_df[['date', 'close', 'high', 'low', 'volume', 'money']]
+        data_df = pd.read_csv(data_file, index_col=0).reset_index()[-1000:]
         data_df = data_df.astype({
             'date' : str,
             'close' : float,
@@ -55,7 +58,12 @@ class KLineSimpleStrategy(BaseStrategy):
             self._main_calc_func(float(real_data['close']), real_data['date'])
         self.data_df['DIFF'] = self.all_diff_value
         self.data_df['MACD'] = self.all_macd_value
-        self.data_df = None
+        self.data_df['PREV_MACD'] = [-1] + self.all_macd_value[:-1]
+        self.data_df['MACD_DIFF'] = self.data_df['MACD'] - self.data_df['PREV_MACD']
+        self.data_df['SignalMACD'] = self.data_df[['close', 'MACD_DIFF']].apply(lambda x: 'buy' if x[1] >= 0.05 * x[0] / self.ratio else ('sell' if x[1] < -0.05 * x[0] / self.ratio else 'NoSignal'), axis=1)
+        #self.data_df = None
+        sub.check_call('mkdir -p {}'.format(os.path.join(self.res_dir, self.stock_code)), shell=True)
+        self.data_df.to_csv(os.path.join(self.res_dir, self.stock_code, 'result_macd.csv'), index=False)
         self.init_flag = True
         self.is_today_init = True
 
@@ -81,7 +89,6 @@ class KLineSimpleStrategy(BaseStrategy):
                 self.is_today_init = False
             self.current_analyze_time = parser.parse(date)
         else:
-            print(self.ema_quick_prev, self.ema_slow_prev, self.dea_prev)
             self.all_diff_value[-1] = cur_diff
             self.all_macd_value[-1] = cur_macd
 
@@ -93,19 +100,21 @@ class KLineSimpleStrategy(BaseStrategy):
     def _ema_real_calc(self, prev, close, alpha):
         return close if prev == 0 else close * alpha + (1 - alpha) * prev
 
-    def _has_buy_signal(self, index):
+    def _has_buy_signal(self, index, price):
         if index > 0 and index < len(self.all_macd_value):
-            return self.all_macd_value[index] - self.all_macd_value[index-1] >= 0.05
+            return self.all_macd_value[index] - self.all_macd_value[index-1] >= 0.05 * price / self.ratio
+            #return self.all_macd_value[index] - self.all_macd_value[index-1] >= 0.05
 
-    def _has_sell_signal(self, index):
+    def _has_sell_signal(self, index, price):
         if index > 0 and index < len(self.all_macd_value):
-            return self.all_macd_value[index] - self.all_macd_value[index-1] < -0.05
+            return self.all_macd_value[index] - self.all_macd_value[index-1] < -0.05 * price / self.ratio
+            #return self.all_macd_value[index] - self.all_macd_value[index-1] < -0.05
 
     def _realtime_has_buy_signal(self, price):
-        return self.all_macd_value[-1] - self.all_macd_value[-2] >= 0.05
+        return self.all_macd_value[-1] - self.all_macd_value[-2] >= 0.05 * price / self.ratio
 
     def _realtime_has_sell_signal(self, price):
-        return self.all_macd_value[-1] - self.all_macd_value[-2] < 0.05
+        return self.all_macd_value[-1] - self.all_macd_value[-2] < -0.05 * price / self.ratio
 
     def _macd_has_buy_signal(self, index):
         if index > 0 and index < len(self.all_macd_value):
