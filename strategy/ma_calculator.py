@@ -5,9 +5,10 @@ from dateutil import parser
 import datetime
 import os
 import subprocess as sub
+import traceback as tb
 
-class MASimpleStrategy(BaseStrategy):
-    def __init__(self, stock_code, data_period, ratio=450, short_period=5, mid_period=10, long_period=20):
+class MACalculator(BaseStrategy):
+    def __init__(self, stock_code, data_period, ratio=450, short_period=13, mid_period=34, long_period=55):
         self.data_period = data_period
         #self.total_period_list = [4, short_period, 6, 7, mid_period, long_period]
         self.short_period = short_period
@@ -18,18 +19,33 @@ class MASimpleStrategy(BaseStrategy):
         self.ma_list = [list() for period in self.total_period_list]
         self.cur_ma_value = [-1] * len(self.total_period_list)
         self.stock_code = stock_code
+        self.load_history_success = True
         self.init()
         self.ratio = ratio
         self.current_analyze_time = parser.parse('1970-01-01')
         self.init_flag = False
-        #self.load_all_history_data()
+        try:
+            self.load_all_history_data()
+        except:
+            print(tb.format_exc())
+            self.load_history_success = False
 
     def init(self):
         self.data_storage = '/home/greetlist/macd/data_storage'
         self.res_dir = '/home/greetlist/macd/result'
         self.k_line_data = '/home/greetlist/macd/data_storage/{}/stock_daily_data/kline_daily.csv' if self.data_period == 'daily' else '/home/greetlist/macd/data_storage/{}/stock_60m_data/kline_60m.csv'
-        data_file = self.k_line_data.format(self.stock_code)
-        data_df = pd.read_csv(data_file, index_col=0).reset_index()[-1000:]
+        self.data_file = self.k_line_data.format(self.stock_code)
+        if os.path.exists(self.data_file):
+            #data_df = pd.read_csv(self.data_file, index_col=0).reset_index()[-250:]
+            data_df = pd.read_csv(self.data_file, index_col=0).reset_index()
+            data_df = data_df.dropna()
+            # no_nan_df = data_df.dropna()
+            # if len(no_nan_df) != len(data_df):
+                # data_df = pd.DataFrame(columns=['date', 'close', 'high', 'low', 'volume', 'money'])
+                # self.load_history_success = False
+        else:
+            data_df = pd.DataFrame(columns=['date', 'close', 'high', 'low', 'volume', 'money'])
+            self.load_history_success = False
 
         data_df = data_df.astype({
             'date' : str,
@@ -62,7 +78,7 @@ class MASimpleStrategy(BaseStrategy):
                     self.ma_list[i].append(self.cur_ma_value[i])
                     self.current_analyze_time = analyze_time
             else:
-                if (analyze_time - self.current_analyze_time).seconds >= 3600:
+                if (analyze_time - self.current_analyze_time).total_seconds() >= 3600:
                     self.price_queues[i].append(price)
                     self.price_queues[i] = self.price_queues[i][1:]
                     self.cur_ma_value[i] = \
@@ -73,7 +89,7 @@ class MASimpleStrategy(BaseStrategy):
                     self.price_queues[i][-1] = price
                     cur_ma_value = self.ma_list[i][-2] + (self.price_queues[i][-1] - self.price_queues[i][0]) / self.total_period_list[i]
                     self.ma_list[i][-1] = cur_ma_value
-        if (analyze_time - self.current_analyze_time).seconds >= 3600:
+        if (analyze_time - self.current_analyze_time).total_seconds() >= 3600:
             self.current_analyze_time = analyze_time
 
     def load_all_history_data(self):
@@ -86,6 +102,7 @@ class MASimpleStrategy(BaseStrategy):
             ori_str = 'MA' + period_str
             prev_str = 'PREV_MA' + period_str
             diff_str = 'MA_DIFF' + period_str
+            print(len(self.data_df), len(self.ma_list[i]))
             self.data_df[ori_str] = self.ma_list[i]
             self.data_df[prev_str] = [-1] + self.ma_list[i][:-1]
             self.data_df[diff_str] = self.data_df[ori_str] - self.data_df[prev_str]

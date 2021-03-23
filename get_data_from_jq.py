@@ -6,7 +6,7 @@ QUERY_COUNT_THRESHOLD = 1000
 class JQDataExtractor(DataExtractorBase):
     def __init__(self):
         super().__init__()
-        auth('18574617263', 'yhgtakdh11')
+        auth('18585146697', 'Nike0810')
 
     def __is_query_enough(self):
         count = get_query_count()

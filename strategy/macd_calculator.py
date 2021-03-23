@@ -6,9 +6,10 @@ from dateutil import parser
 import datetime
 import os
 import subprocess as sub
+import traceback as tb
 
-class KLineSimpleStrategy(BaseStrategy):
-    def __init__(self, start_money, trade_volume, data_period, stock_code, dea_period=9, quick_period=12, slow_period=26):
+class MACDCalculator(BaseStrategy):
+    def __init__(self, stock_code, data_period, dea_period=9, quick_period=12, slow_period=26):
         super().__init__('daily_k_lime_simple_strategy')
         self.dea_period = dea_period
         self.quick_period = quick_period
@@ -23,24 +24,38 @@ class KLineSimpleStrategy(BaseStrategy):
         self.ema_slow_current = 0
         self.ema_slow_prev = 0
         self.stock_code = stock_code
-        self.pnl_tracker = PnlTracker(int(start_money))
-        self.trade_volume = int(trade_volume)
         self.data_period = data_period
         self.current_analyze_time = parser.parse('1970-01-01')
         self.all_diff_value = []
         self.all_macd_value = []
+        self.load_history_success = True
         self.init()
         self.init_flag = False
         self.is_today_init = False
         self.ratio = 33
-        #self.load_all_history_data()
+        try:
+            self.load_all_history_data()
+        except:
+            self.load_history_success = False
+            print(tb.format_exc())
+            print(self.data_file)
 
     def init(self):
         self.data_storage = '/home/greetlist/macd/data_storage'
         self.res_dir = '/home/greetlist/macd/result'
         self.k_line_data = '/home/greetlist/macd/data_storage/{}/stock_daily_data/kline_daily.csv' if self.data_period == 'daily' else '/home/greetlist/macd/data_storage/{}/stock_60m_data/kline_60m.csv'
-        data_file = self.k_line_data.format(self.stock_code)
-        data_df = pd.read_csv(data_file, index_col=0).reset_index()[-1000:]
+        self.data_file = self.k_line_data.format(self.stock_code)
+        if os.path.exists(self.data_file):
+            #data_df = pd.read_csv(self.data_file, index_col=0).reset_index()[-250:]
+            data_df = pd.read_csv(self.data_file, index_col=0).reset_index()
+            data_df = data_df.dropna()
+            # no_nan_df = data_df.dropna()
+            # if len(no_nan_df) != len(data_df):
+                # data_df = pd.DataFrame(columns=['date', 'close', 'high', 'low', 'volume', 'money'])
+                # self.load_history_success = False
+        else:
+            data_df = pd.DataFrame(columns=['date', 'close', 'high', 'low', 'volume', 'money'])
+            self.load_history_success = False
         data_df = data_df.astype({
             'date' : str,
             'close' : float,
@@ -55,7 +70,7 @@ class KLineSimpleStrategy(BaseStrategy):
         last_status = ''
         for item in self.data_df.iterrows():
             real_data = item[1]
-            self._main_calc_func(float(real_data['close']), real_data['date'])
+            self._main_calc_func(float(real_data['close']), real_data['date'], real_data)
         self.data_df['DIFF'] = self.all_diff_value
         self.data_df['MACD'] = self.all_macd_value
         self.data_df['PREV_MACD'] = [-1] + self.all_macd_value[:-1]
@@ -67,7 +82,7 @@ class KLineSimpleStrategy(BaseStrategy):
         self.init_flag = True
         self.is_today_init = True
 
-    def _main_calc_func(self, price, date):
+    def _main_calc_func(self, price, date, real_data):
         #calc EMA
         cur_ema_quick, cur_ema_slow = self._calc_k_line_ema(price)
         #diff = EMA(close, quick_period) - EMA(close, slow_period)
@@ -76,9 +91,14 @@ class KLineSimpleStrategy(BaseStrategy):
         self.dea_current = self._ema_real_calc(self.dea_prev, cur_diff, self.dea_alpha)
         #calc macd MACD = 2 * DEA
         cur_macd = 2 * (cur_diff - self.dea_current)
-        analyze_time = parser.parse(date)
+        try:
+            analyze_time = parser.parse(date)
+        except:
+            print(self.data_file, real_data)
+            self.data_df.to_csv('test.csv', index=False)
+            raise
 
-        if (analyze_time - self.current_analyze_time).seconds >= 3600:
+        if (analyze_time - self.current_analyze_time).total_seconds() >= 3600:
             self.all_diff_value.append(cur_diff)
             self.all_macd_value.append(cur_macd)
             if not self.is_today_init:

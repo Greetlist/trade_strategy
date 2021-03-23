@@ -5,3 +5,5 @@
 nohup.out
 *.swp
 *.gch
+*.gz
+*.out

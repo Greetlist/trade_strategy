@@ -1,7 +1,7 @@
 import argh
 import copy
-from _daily_k_line_simple_strategy import *
-from _ma_simple_strategy import *
+from macd_calculator import *
+from ma_calculator import *
 from pnl_tracker import *
 import os
 import pandas as pd
@@ -13,6 +13,7 @@ def run_strategy(strategy, start_money, stock_code, trade_volume=100, data_perio
     i = 0
     if stock_code == 'all':
         for stock_code in os.listdir('/home/greetlist/macd/data_storage'):
+            #print('deal {} {} th'.format(stock_code, i))
             if stock_code.startswith('00') or stock_code.startswith('60'):
                 i += 1
                 start = time.time()
@@ -20,25 +21,69 @@ def run_strategy(strategy, start_money, stock_code, trade_volume=100, data_perio
                 #res_dict_list.append(_calc_single_stock(start_money, trade_volume, data_period, stock_code))
                 _calc_single_stock(start_money, trade_volume, data_period, stock_code)
                 #print(i, time.time() - start)
-            print('deal {} {} th'.format(stock_code, i))
     else:
-        stock_code = stock_code + '.XSHE'
+        stock_code += '.XSHE' if stock_code.startswith('00') else '.XSHG'
         #res_dict_list.append(_calc_single_stock(start_money, trade_volume, data_period, stock_code))
         _calc_single_stock(start_money, trade_volume, data_period, stock_code)
     #df = pd.DataFrame(res_dict_list)
     #df.to_csv('final.csv', index=False)
 
 def _calc_single_stock(start_money, trade_volume, data_period, stock_code):
-    klines = KLineSimpleStrategy(start_money, trade_volume, data_period, stock_code)
-    mas = MASimpleStrategy(stock_code, data_period, short_period=3)
-    klines.load_all_history_data()
-    mas.load_all_history_data()
+    macd = MACDCalculator(stock_code, data_period)
+    mas = MACalculator(stock_code, data_period)
+
+    if not (macd.load_history_success and mas.load_history_success):
+        return
 
     kline_df = pd.read_csv(os.path.join('/home/greetlist/macd/result', stock_code, 'result_macd.csv'))
     ma_df = pd.read_csv(os.path.join('/home/greetlist/macd/result', stock_code, 'result_ma.csv'))
-    total_df = kline_df.merge(ma_df, on=['date', 'close'], how='left')[['date', 'close', 'SignalMACD', 'Signal'+str(mas.short_period), 'MACD_DIFF', 'MA_DIFF'+str(mas.short_period)]]
+    total_df = kline_df.merge(ma_df, on=['date', 'close', 'high', 'low'], how='left')[['date', 'close', 'high', 'low', 'MA'+str(mas.short_period), 'SignalMACD', 'Signal'+str(mas.short_period), 'Signal'+str(mas.mid_period), 'Signal'+str(mas.long_period),'MACD_DIFF', 'MA_DIFF'+str(mas.short_period)]]
     total_df['Signal'] = total_df[['SignalMACD', 'Signal'+str(mas.short_period)]].apply(lambda x: 'buy' if x[0] == 'buy' and x[1] == 'buy' else ('sell' if x[0] == 'sell' and x[1] == 'sell' else 'NoSignal'), axis=1)
-    total_df.to_csv(os.path.join('/home/greetlist/macd/result', stock_code, 'total_result.csv'))
+    total_df.to_csv(os.path.join('/home/greetlist/macd/result', stock_code, 'total_result.csv'), index=False)
+
+    data_list = ma_df.to_dict('records')
+    pnl_tracker = PnlTracker(int(start_money))
+    buy_date = parser.parse('1970-01-01')
+    for index in range(1, len(data_list) - 1):
+        mid_price = (data_list[index]['high'] + data_list[index]['low']) / 2
+        price_avg_threshold = data_list[index]['close'] * 0.01
+        # if data_list[index]['Signal'+str(mas.short_period)] == 'buy' and \
+           # data_list[index]['Signal'+str(mas.mid_period)] == 'buy' and \
+           # data_list[index]['Signal'+str(mas.long_period)] == 'buy' and \
+           # data_list[index]['close'] > data_list[index]['MA'+str(mas.short_period)]:
+        # if data_list[index]['MA'+str(mas.short_period)] != -1 and \
+           # data_list[index]['MA'+str(mas.mid_period)] != -1 and \
+           # data_list[index]['MA'+str(mas.long_period)] != -1 and \
+           # abs(data_list[index]['MA'+str(mas.short_period)] - data_list[index]['MA'+str(mas.mid_period)]) <= price_avg_threshold and \
+           # abs(data_list[index]['MA'+str(mas.long_period)] - data_list[index]['MA'+str(mas.mid_period)]) <= price_avg_threshold and \
+           # abs(data_list[index]['MA'+str(mas.short_period)] - data_list[index]['MA'+str(mas.long_period)]) <= price_avg_threshold and \
+           # data_list[index]['close'] >= data_list[index]['MA'+str(mas.short_period)]:
+
+        # for buy/sell signal reconsile
+        # if data_list[index]['MA'+str(mas.short_period)] != -1 and \
+           # data_list[index]['close'] >= data_list[index]['MA'+str(mas.short_period)] and \
+           # data_list[index]['Signal'+str(mas.short_period)] == 'buy':
+            # buy_date = parser.parse(data_list[index]['date'])
+            # pnl_tracker.buy(mid_price, trade_volume)
+            # print('********* {} has buy signal ***** current position : {} price : {} pos value : {} price_avg: {}'.format(data_list[index]['date'], pnl_tracker.position, mid_price, pnl_tracker.current_pos_value, pnl_tracker.avg_cost))
+        # elif data_list[index]['close'] <= data_list[index]['MA'+str(mas.short_period)]:
+            # cur_date = parser.parse(data_list[index]['date'])
+            # if (cur_date - buy_date).days <= 0:
+                # continue
+            # pnl_tracker.sell(mid_price, trade_volume)
+            # print('********* {} has sell signal sell vol {} close : {} left pos value : {} left assets: {}'.format(data_list[index]['date'], pnl_tracker.position, mid_price, pnl_tracker.current_pos_value, pnl_tracker.current_assets))
+    # if pnl_tracker.total_trade_count > 0:
+        # print('ratio is : {}, Final Pnl is : {} loss count is : {}, total_trade_count is : {}, loss_rate: {}, loss_money : {}'.format(-1, pnl_tracker.current_assets + pnl_tracker.current_pos_value - pnl_tracker.start_money, pnl_tracker.total_loss, pnl_tracker.total_trade_count, pnl_tracker.total_loss / pnl_tracker.total_trade_count, pnl_tracker.total_loss_money))
+
+    if data_list[-1]['MA'+str(mas.short_period)] != -1 and \
+       data_list[-1]['MA'+str(mas.mid_period)] != -1 and \
+       data_list[-1]['MA'+str(mas.long_period)] != -1 and \
+       abs(data_list[-1]['MA'+str(mas.short_period)] - data_list[-1]['MA'+str(mas.mid_period)]) <= price_avg_threshold and \
+       abs(data_list[-1]['MA'+str(mas.long_period)] - data_list[-1]['MA'+str(mas.mid_period)]) <= price_avg_threshold and \
+       abs(data_list[-1]['MA'+str(mas.short_period)] - data_list[-1]['MA'+str(mas.long_period)]) <= price_avg_threshold and \
+       data_list[-1]['close'] >= data_list[-1]['MA'+str(mas.short_period)]:
+        print(stock_code)
+
     return
     data_list = mas.data_df.to_dict('records')
     mas.data_df['IsTrading'] = False
