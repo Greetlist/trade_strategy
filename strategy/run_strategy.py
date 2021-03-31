@@ -7,20 +7,38 @@ import os
 import pandas as pd
 import time
 from dateutil import parser
+import multiprocessing
+from multiprocessing import Pool
+
+def _calc_stock_group(start_money, trade_volume, data_period, stock_group):
+    for stock_code in stock_group:
+        _calc_single_stock(start_money, trade_volume, data_period, stock_code)
 
 def run_strategy(strategy, start_money, stock_code, trade_volume=100, data_period='daily'):
     res_dict_list = []
-    i = 0
+    #cpu_number = multiprocessing.cpu_count()
+    cpu_number = 6
+    worker_pool = Pool(cpu_number)
+    all_stock_code = []
+    stock_number = 0
+    start_time = time.time()
     if stock_code == 'all':
         for stock_code in os.listdir('/home/greetlist/macd/data_storage'):
             #print('deal {} {} th'.format(stock_code, i))
             if stock_code.startswith('00') or stock_code.startswith('60'):
-                i += 1
-                start = time.time()
+                all_stock_code.append(stock_code)
+                stock_number += 1
+                #start = time.time()
                 #stock_code += '.XSHE' if stock_code.startswith('00') else '.XSHG'
                 #res_dict_list.append(_calc_single_stock(start_money, trade_volume, data_period, stock_code))
-                _calc_single_stock(start_money, trade_volume, data_period, stock_code)
+                #_calc_single_stock(start_money, trade_volume, data_period, stock_code)
                 #print(i, time.time() - start)
+        step = stock_number / cpu_number + 1
+        for i in range(0, cpu_number):
+            worker_pool.apply_async(_calc_stock_group, args=(start_money, trade_volume, data_period, all_stock_code[int(step*i):int(step*(i+1))]))
+        worker_pool.close()
+        worker_pool.join()
+        print("cost : {}".format(time.time() - start_time))
     else:
         stock_code += '.XSHE' if stock_code.startswith('00') else '.XSHG'
         #res_dict_list.append(_calc_single_stock(start_money, trade_volume, data_period, stock_code))
