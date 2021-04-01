@@ -102,8 +102,8 @@ def run(dump_csv=True, stock_code='all'):
                 statistic_instance.run_statistic()
             except:
                 failed_stock.append(stock_code)
-                # print(tb.format_exc())
-                # raise
+                print(tb.format_exc())
+                #raise
                 continue
             data_list.append(statistic_instance.gen_final_result())
             i += 1
