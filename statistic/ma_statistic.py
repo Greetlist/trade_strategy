@@ -19,19 +19,25 @@ class SingleStockMaStatistic:
         self.mid_period = 34
         self.long_period = 55
         self.check_point_date_list = []
+        self.data_df = None
+        self.dense_flag = False
+        self.is_last_price_over_threshold = 0.00
+        self._init()
 
-    def run_statistic(self):
+    def _init(self):
         columns = [
             'date', 'close', 'low', 'volume', 
             'MA' + str(self.short_period), 'MA' + str(self.mid_period), 'MA' + str(self.long_period),
             'PREV_MA13', 'MA_DIFF13']
-        df = pd.read_csv(self.ma_file_path, usecols=columns)
-        data_list = df.to_dict('records')
+        self.data_df = pd.read_csv(self.ma_file_path, usecols=columns)
+
+    def run_ma_break_statistic(self):
+        data_list = self.data_df.to_dict('records')
         data_len = len(data_list)
         for i in range(1, data_len):
             if self.is_check_point(data_list, i):
                 self.check_point_date_list.append(data_list[i]['date'])
-                ten_days_index =  i + 3
+                ten_days_index =  i + 5
                 if ten_days_index > data_len - 1:
                     break
                 if data_list[ten_days_index]['close'] > data_list[i]['close']:
@@ -46,6 +52,8 @@ class SingleStockMaStatistic:
                         self.max_percent_loss = cur_percent
                         self.max_loss_date = data_list[i]['date']
                     self.loss_count += 1
+        self.dense_flag = self.is_move_avg_dense(data_list, -1)
+        self.is_last_price_over_threshold = data_list[-1]['close'] > 15.00
 
     def is_check_point(self, data, index):
         if data[index]['MA13'] != -1 and \
@@ -87,6 +95,9 @@ class SingleStockMaStatistic:
             'MaxLoss' : self.max_percent_loss,
             'MaxProfitDate' : self.max_win_date,
             'MaxLossDate' : self.max_loss_date,
+            'IsMaDenseLastDay' : self.dense_flag,
+            'IsPriceOverThreshold' : self.is_last_price_over_threshold,
+            'CheckFlag' : self.dense_flag and self.is_last_price_over_threshold,
         }
         return result_dict
 
@@ -99,7 +110,7 @@ def run(dump_csv=True, stock_code='all'):
             print(i, stock_code)
             try:
                 statistic_instance = SingleStockMaStatistic(stock_code)
-                statistic_instance.run_statistic()
+                statistic_instance.run_ma_break_statistic()
             except:
                 failed_stock.append(stock_code)
                 print(tb.format_exc())
@@ -117,7 +128,7 @@ def run(dump_csv=True, stock_code='all'):
     else:
         stock_code += '.XSHE' if stock_code.startswith('00') else '.XSHG'
         statistic_instance = SingleStockMaStatistic(stock_code)
-        statistic_instance.run_statistic()
+        statistic_instance.run_ma_break_statistic()
         for date in statistic_instance.check_point_date_list:
             print(date)
 
