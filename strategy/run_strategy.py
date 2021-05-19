@@ -24,7 +24,7 @@ def run_strategy(strategy, start_money, stock_code, trade_volume=100, data_perio
     start_time = time.time()
     if stock_code == 'all':
         for stock_code in os.listdir('/home/greetlist/macd/data_storage'):
-            #print('deal {} {} th'.format(stock_code, i))
+            #print('deal {} '.format(stock_code))
             if stock_code.startswith('00') or stock_code.startswith('60'):
                 all_stock_code.append(stock_code)
                 stock_number += 1
@@ -93,13 +93,15 @@ def _calc_single_stock(start_money, trade_volume, data_period, stock_code):
     # if pnl_tracker.total_trade_count > 0:
         # print('ratio is : {}, Final Pnl is : {} loss count is : {}, total_trade_count is : {}, loss_rate: {}, loss_money : {}'.format(-1, pnl_tracker.current_assets + pnl_tracker.current_pos_value - pnl_tracker.start_money, pnl_tracker.total_loss, pnl_tracker.total_trade_count, pnl_tracker.total_loss / pnl_tracker.total_trade_count, pnl_tracker.total_loss_money))
 
+    price_avg_threshold = data_list[-1]['close'] * 0.01
     if data_list[-1]['MA'+str(mas.short_period)] != -1 and \
        data_list[-1]['MA'+str(mas.mid_period)] != -1 and \
        data_list[-1]['MA'+str(mas.long_period)] != -1 and \
        abs(data_list[-1]['MA'+str(mas.short_period)] - data_list[-1]['MA'+str(mas.mid_period)]) <= price_avg_threshold and \
        abs(data_list[-1]['MA'+str(mas.long_period)] - data_list[-1]['MA'+str(mas.mid_period)]) <= price_avg_threshold and \
        abs(data_list[-1]['MA'+str(mas.short_period)] - data_list[-1]['MA'+str(mas.long_period)]) <= price_avg_threshold and \
-       data_list[-1]['close'] >= data_list[-1]['MA'+str(mas.short_period)]:
+       data_list[-1]['close'] >= data_list[-1]['MA'+str(mas.short_period)] and \
+       data_list[-1]['close'] > 11.00:
         print(stock_code)
 
     return

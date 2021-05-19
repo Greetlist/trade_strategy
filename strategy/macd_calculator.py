@@ -37,8 +37,11 @@ class MACDCalculator(BaseStrategy):
             self.load_all_history_data()
         except:
             self.load_history_success = False
+            print('*' * 100)
+            print(self.stock_code)
             print(tb.format_exc())
-            print(self.data_file)
+            print('*' * 100)
+            #print(self.data_file)
 
     def init(self):
         self.data_storage = '/home/greetlist/macd/data_storage'
@@ -48,6 +51,7 @@ class MACDCalculator(BaseStrategy):
         if os.path.exists(self.data_file):
             #data_df = pd.read_csv(self.data_file, index_col=0).reset_index()[-250:]
             data_df = pd.read_csv(self.data_file, index_col=0).reset_index()
+            self.data_df = data_df.fillna(0)
             data_df = data_df.dropna()
             # no_nan_df = data_df.dropna()
             # if len(no_nan_df) != len(data_df):
@@ -63,7 +67,6 @@ class MACDCalculator(BaseStrategy):
             'low' : float,
             'volume' : float,
             'money' : float})
-        self.data_df = data_df.fillna(0)
 
     def load_all_history_data(self):
         last_mid_pirce = 0
@@ -94,8 +97,8 @@ class MACDCalculator(BaseStrategy):
         try:
             analyze_time = parser.parse(date)
         except:
-            print(self.data_file, real_data)
-            self.data_df.to_csv('test.csv', index=False)
+            #print(self.data_file, real_data)
+            #self.data_df.to_csv('test.csv', index=False)
             raise
 
         if (analyze_time - self.current_analyze_time).total_seconds() >= 3600:

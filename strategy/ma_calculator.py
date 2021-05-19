@@ -27,7 +27,10 @@ class MACalculator(BaseStrategy):
         try:
             self.load_all_history_data()
         except:
+            print('*' * 100)
+            print(self.stock_code)
             print(tb.format_exc())
+            print('*' * 100)
             self.load_history_success = False
 
     def init(self):
@@ -38,6 +41,7 @@ class MACalculator(BaseStrategy):
         if os.path.exists(self.data_file):
             #data_df = pd.read_csv(self.data_file, index_col=0).reset_index()[-250:]
             data_df = pd.read_csv(self.data_file, index_col=0).reset_index()
+            self.data_df = data_df.fillna(0)
             data_df = data_df.dropna()
             # no_nan_df = data_df.dropna()
             # if len(no_nan_df) != len(data_df):
@@ -54,7 +58,6 @@ class MACalculator(BaseStrategy):
             'low' : float,
             'volume' : float,
             'money' : float})
-        self.data_df = data_df.fillna(0)
 
     def _main_calc_func(self, price, date):
         analyze_time = parser.parse(date)
@@ -102,7 +105,6 @@ class MACalculator(BaseStrategy):
             ori_str = 'MA' + period_str
             prev_str = 'PREV_MA' + period_str
             diff_str = 'MA_DIFF' + period_str
-            print(len(self.data_df), len(self.ma_list[i]))
             self.data_df[ori_str] = self.ma_list[i]
             self.data_df[prev_str] = [-1] + self.ma_list[i][:-1]
             self.data_df[diff_str] = self.data_df[ori_str] - self.data_df[prev_str]

@@ -58,9 +58,9 @@ if __name__ == '__main__':
     # init_all_stock_query_status()
     # sys.exit(1)
 
-    data_extractor = JQDataExtractor()
     failed_stock_df = get_failed_stock_df()
     failed_stock_df = failed_stock_df[(failed_stock_df['stock_code'].str.startswith('00')) | (failed_stock_df['stock_code'].str.startswith('60'))]
+    data_extractor = JQDataExtractor()
     for stock_code in failed_stock_df['stock_code'].values:
         try:
             status_file = stock_status_dir + stock_code + '.new_trading_date.csv'
